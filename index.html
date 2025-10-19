@@ -1,9 +1,10 @@
+
 <!doctype html>
 <html lang="cs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Uzávěrky – všechny filtry opraveny</title>
+    <title>Uzávěrky – všechny filtry včetně datumu</title>
     
 <style>
   :root { --bg:#0b0e14; --card:#121826; --ink:#e6edf3; --muted:#9fb3c8; --chip:#222b3e; --good:#22c55e; --bad:#ef4444; --neutral:#94a3b8; --fav:#fde68a; }
@@ -62,14 +63,43 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   });
 
-  // Global filters (incl. section visibility)
+  // Elements
   const sessionFilter = document.getElementById('sessionFilter');
   const flagFilter = document.getElementById('flagFilter');
   const favOnly = document.getElementById('favOnly');
   const countryFilter = document.getElementById('countryFilter');
   const strategyFilter = document.getElementById('strategyFilter');
+  const dateFilter = document.getElementById('dateFilter');
   const titleSess = document.getElementById('title-session');
-  const strategySet = new Set(['SFIX','VICOR','LRN','YEXT','CFLT','PATH','SNAP','CDLX','GTN','TWST','FSLY','WOOF','SNBR','OUST','HEAR','BGS','SG','LYFT','GRPN','UPST','AFRM','ESTC','APP','OKTA','GTLB']);
+
+  // Strategy tickers
+  const strategySet = new Set(['SFIX', 'VICOR', 'LRN', 'YEXT', 'CFLT', 'PATH', 'SNAP', 'CDLX', 'GTN', 'TWST', 'FSLY', 'WOOF', 'SNBR', 'OUST', 'HEAR', 'BGS', 'SG', 'LYFT', 'GRPN', 'UPST', 'AFRM', 'ESTC', 'APP', 'OKTA', 'GTLB']);
+
+  // Build date options from rows; include only >= today's date (local time)
+  (function populateDates(){
+    const set = new Set();
+    document.querySelectorAll('.row .date').forEach(el=>{
+      const m = el.textContent.match(/\d{4}-\d{2}-\d{2}/);
+      if(m) set.add(m[0]);
+    });
+    const all = Array.from(set).sort();
+    const today = new Date(); today.setHours(0,0,0,0);
+    const keep = all.filter(ds=>{
+      const [y,m,d] = ds.split('-').map(Number);
+      const dt = new Date(y, m-1, d);
+      return dt >= today; // include today, exclude past
+    });
+    const days = ['ne','po','út','st','čt','pá','so'];
+    keep.forEach(ds=>{
+      const [y,m,d] = ds.split('-').map(Number);
+      const dt = new Date(y, m-1, d);
+      const dayTxt = days[dt.getDay()];
+      const opt = document.createElement('option');
+      opt.value = ds;
+      opt.textContent = dayTxt + ' ' + ds;
+      dateFilter.appendChild(opt);
+    });
+  })();
 
   function applyFilters(){
     const sess = sessionFilter.value; // 'all','AMC','BMO'
@@ -77,36 +107,33 @@ document.addEventListener('DOMContentLoaded',()=>{
     const onlyFav = favOnly.checked;
     const country = countryFilter.value; // 'all','USA'
     const strat = strategyFilter.value; // 'all','vol'
+    const dateVal = dateFilter.value; // 'all' or 'YYYY-MM-DD'
 
-    // Update title
     titleSess.textContent = (sess==='AMC' ? '— After Market Close' : (sess==='BMO' ? '— Before Market Open' : '— vše'));
 
     const secAMC = document.getElementById('section-amc');
     const secBMO = document.getElementById('section-bmo');
-    // Hide whole sections accordingly
     secAMC.classList.toggle('hidden', sess==='BMO');
     secBMO.classList.toggle('hidden', sess==='AMC');
 
-    // Row filtering and counts
     [['section-amc','After Market Close'],['section-bmo','Before Market Open']].forEach(([secId, sessName])=>{
       const sec = document.getElementById(secId);
       let visibleCount = 0;
       sec.querySelectorAll('.row').forEach(row=>{
         const s = row.querySelector('.sess').textContent.trim();
         const f = row.querySelector('.lamp').getAttribute('data-flag') || 'neutral';
-        const t = row.querySelector('.ticker').textContent.trim().split(' ')[0];
+        const t = row.querySelector('.ticker').textContent.trim().split(' ')[0].toUpperCase();
+        const comp = row.querySelector('.company').textContent.toUpperCase();
         const isFav = row.classList.contains('fav');
+        const d = row.querySelector('.date').textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || '';
         let ok = true;
         if(sess==='AMC' && s!==sessName) ok=false;
         if(sess==='BMO' && s!==sessName) ok=false;
         if(flag!=='all' && f!==flag) ok=false;
         if(onlyFav && !isFav) ok=false;
         if(country==='USA' && !/^([A-Z]+)$/.test(t)) ok=false;
-        if(strat==='vol'){
-          const comp = row.querySelector('.company').textContent.toUpperCase();
-          const hit = strategySet.has(t) || Array.from(strategySet).some(tok=>comp.includes(tok));
-          if(!hit) ok=false;
-        }
+        if(strat==='vol' && !(strategySet.has(t) || strategySet.has(comp))) ok=false;
+        if(dateVal!=='all' && d!==dateVal) ok=false;
         row.style.display = ok ? 'grid' : 'none';
         if(ok) visibleCount++;
       });
@@ -115,8 +142,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }
 
-  [sessionFilter, flagFilter, favOnly, countryFilter, strategyFilter].forEach(el=>el.addEventListener('change', applyFilters));
-  // Run once on load so current selection applies immediately
+  [sessionFilter, flagFilter, favOnly, countryFilter, strategyFilter, dateFilter].forEach(el=>el.addEventListener('change', applyFilters));
   applyFilters();
 });
 </script>
@@ -126,7 +152,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     <header>
       <div class="wrap">
         <h1>Uzávěrky výsledků – říjen 2025 <span id="title-session"></span></h1>
-        <div class="subtitle">Opraveny selektory: Session (skrývá sekce), Semafor, Jen ★, Země: USA/vše. Stav se ukládá v prohlížeči.</div>
+        <div class="subtitle">Filtry: Session, Semafor, Jen ★, Země (USA), Strategie (oboustranná volatilní), Datum (jen dnešek a budoucí).</div>
         <div class="toolbar">
           <label>Session:
             <select id="sessionFilter">
@@ -154,6 +180,11 @@ document.addEventListener('DOMContentLoaded',()=>{
             <select id="strategyFilter">
               <option value="all" selected>vše</option>
               <option value="vol">oboustranná volatilní</option>
+            </select>
+          </label>
+          <label>Datum:
+            <select id="dateFilter">
+              <option value="all" selected>vše</option>
             </select>
           </label>
         </div>
@@ -678,7 +709,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Netflix, Inc.</div>
             <div class="meta">Services<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -951,7 +982,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>ASGN Incorporated</div>
             <div class="meta">Consumer Goods<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -3642,7 +3673,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Confluent Inc.</div>
             <div class="meta">Technology<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -4006,7 +4037,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Seacoast Banking Corporation of Florida</div>
             <div class="meta">Financial<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -4695,7 +4726,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Flowserve Corp</div>
             <div class="meta">Industrial Goods<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -6203,7 +6234,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Flushing Financial Corporation</div>
             <div class="meta">Financial<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -6463,7 +6494,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Jeronimo Martins SGPS SA</div>
             <div class="meta">Consumer Goods<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -6710,7 +6741,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Microsoft</div>
             <div class="meta">Technology<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -6892,7 +6923,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Omega Flex Inc</div>
             <div class="meta">Industrial Goods<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -8569,7 +8600,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Fluidra S.A</div>
             <div class="meta">Industrial Goods<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -8608,7 +8639,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Flow Traders Cooperatief UA</div>
             <div class="meta">Financial<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -8621,7 +8652,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Floor & Decor Holdings Inc.</div>
             <div class="meta">Consumer Goods<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -9102,7 +9133,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Cloudflare</div>
             <div class="meta">Technology<br><span class='sess'>After Market Close</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -11853,7 +11884,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Flagstar Financial Inc</div>
             <div class="meta">Financial<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -12594,7 +12625,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Heartland Express Inc</div>
             <div class="meta">Industrial Goods<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -13530,7 +13561,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Flex Ltd</div>
             <div class="meta">Industrial Goods<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -14479,7 +14510,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Butterfly Network Inc.</div>
             <div class="meta">Consumer Goods<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -14648,7 +14679,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>COMPASS Pathways plc</div>
             <div class="meta">Consumer Goods<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -14973,7 +15004,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>1 800 FLOWERS COM</div>
             <div class="meta">Services<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
@@ -15909,7 +15940,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div class="company"><span class='star' title='Často obchodované'>★</span>Teleflex Inc</div>
             <div class="meta">Consumer Goods<br><span class='sess'>Before Market Open</span></div>
             <div class="actions">
-              <button class="lamp" data-flag="bull" title="Klikni pro přepnutí (🟢/⚪/🔴)">
+              <button class="lamp" data-flag="neutral" title="Klikni pro přepnutí (🟢/⚪/🔴)">
                 <span class="dot"></span>
               </button>
               <label class="done"><input type="checkbox" /> hotovo</label>
